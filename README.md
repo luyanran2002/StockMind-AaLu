@@ -5,6 +5,8 @@ and Python. The goal is not a stock chatbot, but an agent with a real runtime:
 autonomous tool selection, explicit state management, deterministic
 computation, observability and evaluation hooks.
 
+> Language: **English** | [简体中文](README.zh-CN.md)
+
 > **Current scope (Phase 1 + Phase 2):** the core ReAct loop, a full tool set
 > (market, financial, news, technical, valuation), state management, iteration
 > limits, tool error handling, structured final output, bilingual reports
