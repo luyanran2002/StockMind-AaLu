@@ -95,6 +95,10 @@ tests/
 examples/
     research.py             # 多股票、双语 CLI
     nvda_research.py        # NVDA 快速演示
+promptlog/
+    __main__.py             # prompt 记录 CLI
+    journal.py              # 存储与渲染
+    prompts.jsonl / prompts.md
 ```
 
 ---
@@ -146,6 +150,20 @@ pytest
 
 ---
 
+## Prompt 记录
+
+独立的 prompt 记录框架位于 [`promptlog/`](promptlog/)：
+
+```bash
+python -m promptlog add "你的 prompt" --tag finance
+python -m promptlog list --limit 20
+python -m promptlog export
+```
+
+详见 [promptlog/README.md](promptlog/README.md)。
+
+---
+
 ## 配置
 
 参见 [.env.example](.env.example)。关键变量：
@@ -189,4 +207,3 @@ API key 由底层 SDK 从环境变量读取，绝不写入代码。
 - [ ] **Phase 3** — 异步执行、检查点、重试/退避加固。
 - [ ] **Phase 4** — 更丰富的追踪、评估数据集、成本统计。
 - [ ] **Phase 5** — 历史评估 / 信号回测。
-

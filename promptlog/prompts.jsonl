@@ -1,0 +1,7 @@
+{"id": "338234a8", "timestamp": "2026-08-15T19:29:35+08:00", "prompt": "你是谁", "tags": ["identity"], "note": "会话开场（backfilled）", "meta": {}}
+{"id": "329708b7", "timestamp": "2026-08-15T19:29:35+08:00", "prompt": "（粘贴文件）StockMind 项目需求规格，含 Phase 1–19 完整要求", "tags": ["stockmind", "spec"], "note": "完整内容见 ~/.codex/attachments/32471ee0-f829-47f0-aa43-f9230f23257f/pasted-text.txt", "meta": {}}
+{"id": "0b7c5ed9", "timestamp": "2026-08-15T19:29:35+08:00", "prompt": "可以继续phase2，但我有两个疑惑，第一是可不可以加入中文选项，第二个是只有nvda吗，能不能增加别的stock选项", "tags": ["stockmind", "phase2"], "note": null, "meta": {}}
+{"id": "a00feadb", "timestamp": "2026-08-15T19:29:35+08:00", "prompt": "帮我push进github", "tags": ["git"], "note": null, "meta": {}}
+{"id": "d3f7769c", "timestamp": "2026-08-15T19:29:35+08:00", "prompt": "read me能也加入中文选项吗", "tags": ["docs"], "note": null, "meta": {}}
+{"id": "42bc93b7", "timestamp": "2026-08-15T19:29:35+08:00", "prompt": "要怎么跑呢", "tags": ["usage"], "note": null, "meta": {}}
+{"id": "efceccb0", "timestamp": "2026-08-15T19:29:35+08:00", "prompt": "另外我需要一个单独的框架记录我发给你的所有prompt", "tags": ["promptlog"], "note": null, "meta": {}}

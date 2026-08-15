@@ -100,6 +100,10 @@ tests/
 examples/
     research.py             # multi-stock, bilingual CLI
     nvda_research.py        # quick NVDA demo
+promptlog/
+    __main__.py             # prompt journal CLI
+    journal.py              # storage + rendering
+    prompts.jsonl / prompts.md
 ```
 
 ---
@@ -150,6 +154,20 @@ python examples/research.py --tickers AAPL --lang en
 ```bash
 pytest
 ```
+
+---
+
+## Prompt journal
+
+A standalone prompt recorder lives in [`promptlog/`](promptlog/):
+
+```bash
+python -m promptlog add "your prompt" --tag finance
+python -m promptlog list --limit 20
+python -m promptlog export
+```
+
+See [promptlog/README.md](promptlog/README.md).
 
 ---
 
