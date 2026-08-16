@@ -46,6 +46,7 @@ explicit and testable.
 | Tools (`app/tools`) | Data retrieval + deterministic computation |
 | Analysis (`app/tools/analysis.py`) | Pure, side-effect-free financial/technical math |
 | Providers (`app/tools/providers.py`) | Raw data retrieval (mock + yfinance) |
+| Report assembly (`app/reporting`) | Deterministic, evidence-grounded report fallback |
 | LangGraph (`app/graph`) | State, control flow, iteration/termination logic |
 | Pydantic (`app/schemas`) | Structured data contracts |
 | Tracing (`app/observability`) | Run/step/tool observability |
@@ -85,6 +86,8 @@ app/
 ├── models/
 │   ├── providers.py        # OpenAI / Anthropic abstraction
 │   └── demo.py             # offline scripted demo model
+├── reporting/
+│   └── assembler.py        # evidence-grounded report fallback
 ├── tools/
 │   ├── base.py             # provenance + metric serialization
 │   ├── analysis.py         # pure deterministic computation
@@ -250,8 +253,10 @@ stored in code.
   failed tool becomes an error observation, never a crash.
 * **Structured output with fallback** — `finalize` prefers
   `llm.with_structured_output(StockResearchReport)`, then JSON parsing, then a
-  minimal honest report, so tests/demo remain offline while real models get a
-  strict schema.
+  deterministic evidence-grounded assembly from tool observations, so the
+  offline demo still quotes real numbers and sources.
+* **Precise timing** — every report carries `generated_at` (ISO 8601,
+  microsecond precision, with timezone).
 * **Bilingual** — `language` is part of the run config/state; prompts carry a
   language directive while the structured-output schema stays stable.
 * **Provenance** — mock data is explicitly labelled; the system prompt forbids

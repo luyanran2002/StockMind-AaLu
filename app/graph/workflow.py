@@ -29,6 +29,7 @@ from langgraph.graph import END, StateGraph
 from app.agents.prompts import get_finalize_prompt, get_system_prompt
 from app.graph.state import StockAgentState
 from app.observability.tracing import TraceCollector
+from app.reporting.assembler import build_grounded_report
 from app.schemas.report import StockResearchReport
 from app.tools.base import tool_call_signature
 
@@ -372,7 +373,15 @@ async def _generate_report(
     except Exception:
         pass
 
-    # 3) Last resort: wrap the raw reasoning in a minimal, honest report.
+    # 3) Deterministic, evidence-grounded assembly from tool observations.
+    try:
+        grounded = build_grounded_report(state, state.get("language", "en"))
+        if grounded is not None:
+            return grounded
+    except Exception:
+        pass
+
+    # 4) Last resort: wrap the raw reasoning in a minimal, honest report.
     return _fallback_report(
         ticker,
         final_report,

@@ -40,3 +40,9 @@ def test_mock_provider_is_deterministic():
     p2 = MockMarketDataProvider(seed=7)
     assert p1.get_stock_price("NVDA").price == p2.get_stock_price("NVDA").price
 
+
+def test_mock_history_ends_at_current_price():
+    provider = MockMarketDataProvider(seed=1)
+    current = provider.get_stock_price("NVDA").price
+    history = provider.get_historical_prices("NVDA", "1mo", "1d")
+    assert history.bars[-1].close == current

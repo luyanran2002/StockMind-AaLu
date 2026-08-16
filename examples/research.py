@@ -113,21 +113,22 @@ def _print_report(report: StockResearchReport, language: str) -> None:
     print("=" * 70)
 
 
-def _extract_bars(state: dict) -> list[PriceBar]:
+def _extract_history(state: dict) -> tuple[list[PriceBar], str | None]:
     """Pull historical price bars out of the collected tool observations."""
     for obs in reversed(state.get("observations", [])):
         if obs.get("tool") != "get_historical_prices":
             continue
         try:
             payload = json.loads(obs["result"])
-            return [PriceBar(**bar) for bar in payload.get("bars", [])]
+            bars = [PriceBar(**bar) for bar in payload.get("bars", [])]
+            return bars, payload.get("note")
         except (TypeError, ValueError, KeyError):
             continue
-    return []
+    return [], None
 
 
 def _render_chart(state: dict, ticker: str, language: str) -> None:
-    bars = _extract_bars(state)
+    bars, note = _extract_history(state)
     if not bars:
         print("\n(no historical bars collected — chart skipped)")
         return
@@ -136,7 +137,11 @@ def _render_chart(state: dict, ticker: str, language: str) -> None:
     print(f"  {ascii_sparkline(closes)}")
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     chart_path = render_price_chart(
-        bars, ticker, CHARTS_DIR / f"{ticker}_{stamp}.png", language=language
+        bars,
+        ticker,
+        CHARTS_DIR / f"{ticker}_{stamp}.png",
+        language=language,
+        watermark=note or "simulated data",
     )
     print(f"  Chart saved: {chart_path}")
 

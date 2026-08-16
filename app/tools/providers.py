@@ -209,25 +209,30 @@ class MockMarketDataProvider(MarketDataProvider):
         symbol = ticker.upper().strip()
         rng = self._rng(symbol, "history")
         days = self._period_to_days(period)
-        base = self._base_price(symbol)
-        bars: list[PriceBar] = []
-        price = base * 0.9
+        current = self._current_price(symbol)
         today = datetime.now(timezone.utc).date()
-        for i in range(days):
+
+        # Build closes backwards from the current price so the final bar equals
+        # get_stock_price(), keeping the simulated dataset internally consistent.
+        closes = [0.0] * days
+        closes[-1] = current
+        for i in range(days - 2, -1, -1):
             drift = rng.uniform(-0.03, 0.03)
-            price = max(1.0, price * (1 + drift))
-            open_ = price * rng.uniform(0.99, 1.01)
-            close = price
+            closes[i] = round(max(1.0, closes[i + 1] / (1 + drift)), 2)
+
+        bars: list[PriceBar] = []
+        for i, close in enumerate(closes):
+            open_ = close * rng.uniform(0.99, 1.01)
             high = max(open_, close) * rng.uniform(1.0, 1.02)
             low = min(open_, close) * rng.uniform(0.98, 1.0)
             volume = int(rng.uniform(1_000_000, 80_000_000))
             bars.append(
                 PriceBar(
-                    date=(today - timedelta(days=days - i)).isoformat(),
+                    date=(today - timedelta(days=days - i - 1)).isoformat(),
                     open=round(open_, 2),
                     high=round(high, 2),
                     low=round(low, 2),
-                    close=round(close, 2),
+                    close=close,
                     volume=volume,
                 )
             )

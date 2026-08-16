@@ -15,10 +15,15 @@ def _agent(ticker, language):
 def test_demo_runs_full_phase2_loop():
     agent = _agent("AMD", "en")
     state = agent.run("research AMD", ticker="AMD")
-    assert state["final_output"].ticker == "AMD"
-    # The scripted demo calls 10 distinct Phase 2 tools.
-    assert len(state["observations"]) == 10
+    report = state["final_output"]
+    assert report.ticker == "AMD"
+    # The scripted demo calls 15 distinct Phase 2 tools.
+    assert len(state["observations"]) == 15
     assert state["errors"] == []
+    # The report is assembled from real observations, not canned prose.
+    assert report.key_metrics["price"] is not None
+    assert "data_sources" in report.key_metrics
+    assert any("mock" in source for source in report.key_metrics["data_sources"])
 
 
 def test_demo_supports_chinese_and_other_tickers():

@@ -42,6 +42,7 @@ Pydantic 与 Python 构建。目标不是做一个「股票聊天机器人」，
 | 工具（`app/tools`） | 数据获取 + 确定性计算 |
 | 分析（`app/tools/analysis.py`） | 无副作用、纯函数的财务/技术数学计算 |
 | 数据源（`app/tools/providers.py`） | 原始数据获取（mock + yfinance） |
+| 报告组装（`app/reporting`） | 确定性、基于证据的报告兜底 |
 | LangGraph（`app/graph`） | 状态、控制流、迭代/终止逻辑 |
 | Pydantic（`app/schemas`） | 结构化数据契约 |
 | 追踪（`app/observability`） | 运行/步骤/工具可观测性 |
@@ -80,6 +81,8 @@ app/
 ├── models/
 │   ├── providers.py        # OpenAI / Anthropic 抽象
 │   └── demo.py             # 离线脚本化演示模型
+├── reporting/
+│   └── assembler.py        # 基于证据的报告兜底
 ├── tools/
 │   ├── base.py             # 溯源 + 指标序列化
 │   ├── analysis.py         # 纯确定性计算
@@ -240,7 +243,8 @@ API key 由底层 SDK 从环境变量读取，绝不写入代码。
   检测与优雅降级：失败的工具会变成一条错误观察，而不会导致崩溃。
 * **结构化输出 + 兜底** — `finalize` 优先使用
   `llm.with_structured_output(StockResearchReport)`，其次尝试 JSON 解析，最后退化为
-  一份诚实的最小报告；因此测试/演示可离线运行，而真实模型仍使用严格 schema。
+  基于工具观测的确定性组装报告；因此离线演示也能引用真实数字与来源。
+* **精确时间** — 每份报告都携带 `generated_at`（ISO 8601，微秒精度，含时区）。
 * **双语** — `language` 是运行配置/状态的一部分；提示词携带语言指令，而结构化
   输出的 schema 保持稳定。
 * **溯源** — mock 数据被明确标注；系统提示禁止编造数据并要求注明来源。
