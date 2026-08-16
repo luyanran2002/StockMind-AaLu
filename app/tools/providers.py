@@ -604,18 +604,16 @@ class YFinanceMarketDataProvider(MarketDataProvider):
 
 
 class AkShareMarketDataProvider(MarketDataProvider):
-    """US stock data via ``akshare`` (Eastmoney), reachable from mainland China.
+    """US stock data via ``akshare`` (Sina), reachable from mainland China.
 
-    Covers real-time (delayed ~15 min) quotes, historical bars and a few key
-    stats. US financial statements are *not* exposed by akshare, so those
-    methods return empty (noted) results and valuation tools degrade to N/A.
+    Uses a single-ticker daily endpoint (``stock_us_daily``) so lookups are
+    fast and don't require fetching the full market list. Covers latest daily
+    close and history. Key stats / financials / news are not exposed by this
+    endpoint, so those degrade to N/A.
     """
 
-    SOURCE = "akshare/eastmoney"
-    NOTE = "US stock data via akshare (Eastmoney); ~15 min delayed, not real-time."
-
-    def __init__(self) -> None:
-        self._spot_cache: Any = None
+    SOURCE = "akshare/sina"
+    NOTE = "US stock daily data via akshare (Sina); ~15 min delayed, not real-time."
 
     def _ak(self) -> Any:
         try:
@@ -626,27 +624,9 @@ class AkShareMarketDataProvider(MarketDataProvider):
             ) from exc
         return akshare
 
-    def _spot(self) -> Any:
-        if self._spot_cache is None:
-            df = self._ak().stock_us_spot_em()
-            if df is None or getattr(df, "empty", True):
-                raise ValueError("akshare returned no US stock spot data")
-            self._spot_cache = df
-        return self._spot_cache
-
-    def _resolve(self, ticker: str) -> tuple[str, Any]:
-        symbol = ticker.upper().strip()
-        df = self._spot()
-        codes = df["代码"].astype(str).str.upper()
-        mask = codes.str.endswith("." + symbol) | codes.eq(symbol)
-        rows = df[mask]
-        if rows.empty:
-            raise ValueError(f"Ticker {symbol!r} not found in akshare US stock list")
-        return str(rows.iloc[0]["代码"]), rows.iloc[0]
-
     @staticmethod
-    def _period_start(period: str) -> str:
-        days = {
+    def _period_days(period: str) -> int:
+        return {
             "1d": 1,
             "5d": 5,
             "1mo": 30,
@@ -656,16 +636,16 @@ class AkShareMarketDataProvider(MarketDataProvider):
             "2y": 730,
             "5y": 1825,
         }.get(period, 180)
-        return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y%m%d")
 
-    @staticmethod
-    def _interval_to_period(interval: str) -> str:
-        return {"1wk": "weekly", "1mo": "monthly"}.get(interval, "daily")
+    def _daily(self, ticker: str, adjust: str) -> Any:
+        return self._ak().stock_us_daily(symbol=ticker.upper().strip(), adjust=adjust)
 
     def get_stock_price(self, ticker: str) -> StockPriceResult:
         symbol = ticker.upper().strip()
-        _, row = self._resolve(symbol)
-        price = _as_float(row.get("最新价"))
+        df = self._daily(symbol, adjust="")
+        if df is None or getattr(df, "empty", True):
+            raise ValueError(f"No price found for ticker {symbol!r}")
+        price = _as_float(df.iloc[-1].get("close"))
         if price is None:
             raise ValueError(f"No price found for ticker {symbol!r}")
         return StockPriceResult(
@@ -674,7 +654,7 @@ class AkShareMarketDataProvider(MarketDataProvider):
             currency="USD",
             source=self.SOURCE,
             timestamp=utc_now(),
-            data_period="latest (delayed)",
+            data_period="latest daily close",
             note=self.NOTE,
         )
 
@@ -682,26 +662,21 @@ class AkShareMarketDataProvider(MarketDataProvider):
         self, ticker: str, period: str, interval: str
     ) -> HistoricalPricesResult:
         symbol = ticker.upper().strip()
-        code, _ = self._resolve(symbol)
-        df = self._ak().stock_us_hist(
-            symbol=code,
-            period=self._interval_to_period(interval),
-            start_date=self._period_start(period),
-            end_date=datetime.now(timezone.utc).strftime("%Y%m%d"),
-            adjust="qfq",
-        )
+        df = self._daily(symbol, adjust="qfq")
         if df is None or getattr(df, "empty", True):
             raise ValueError(f"No historical data found for ticker {symbol!r}")
+        df = df.tail(self._period_days(period))
         bars: list[PriceBar] = []
         for _, row in df.iterrows():
-            volume = _as_float(row.get("成交量")) or 0
+            volume = _as_float(row.get("volume")) or 0
+            date_val = row.get("date") or row.get("index") or ""
             bars.append(
                 PriceBar(
-                    date=str(row.get("日期"))[:10],
-                    open=float(_as_float(row.get("开盘")) or 0.0),
-                    high=float(_as_float(row.get("最高")) or 0.0),
-                    low=float(_as_float(row.get("最低")) or 0.0),
-                    close=float(_as_float(row.get("收盘")) or 0.0),
+                    date=str(date_val)[:10],
+                    open=float(_as_float(row.get("open")) or 0.0),
+                    high=float(_as_float(row.get("high")) or 0.0),
+                    low=float(_as_float(row.get("low")) or 0.0),
+                    close=float(_as_float(row.get("close")) or 0.0),
                     volume=int(volume),
                 )
             )
@@ -717,22 +692,11 @@ class AkShareMarketDataProvider(MarketDataProvider):
         )
 
     def get_key_stats(self, ticker: str) -> KeyStats:
-        symbol = ticker.upper().strip()
-        _, row = self._resolve(symbol)
-        price = _as_float(row.get("最新价"))
-        market_cap = _as_float(row.get("总市值"))
-        pe = _as_float(row.get("市盈率"))
-        eps = round(price / pe, 2) if (price and pe and pe > 0) else None
-        shares = round(market_cap / price, 0) if (market_cap and price) else None
         return KeyStats(
-            ticker=symbol,
-            eps_ttm=eps,
-            shares_outstanding=shares,
-            market_cap=market_cap,
-            beta=None,
+            ticker=ticker.upper().strip(),
             source=self.SOURCE,
             timestamp=utc_now(),
-            note=self.NOTE,
+            note="Market cap / EPS not available via akshare daily endpoint.",
         )
 
     def get_income_statement(self, ticker: str) -> IncomeStatement:
