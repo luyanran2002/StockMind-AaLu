@@ -4,6 +4,7 @@ from app.tools.financial import build_financial_tools
 from app.tools.market import build_market_tools
 from app.tools.news import build_news_tools
 from app.tools.providers import (
+    AkShareMarketDataProvider,
     MarketDataProvider,
     MockMarketDataProvider,
     YFinanceMarketDataProvider,
@@ -28,6 +29,7 @@ __all__ = [
     "MarketDataProvider",
     "MockMarketDataProvider",
     "YFinanceMarketDataProvider",
+    "AkShareMarketDataProvider",
     "get_data_provider",
     "build_tools",
 ]

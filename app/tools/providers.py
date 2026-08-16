@@ -603,6 +603,183 @@ class YFinanceMarketDataProvider(MarketDataProvider):
         )
 
 
+class AkShareMarketDataProvider(MarketDataProvider):
+    """US stock data via ``akshare`` (Eastmoney), reachable from mainland China.
+
+    Covers real-time (delayed ~15 min) quotes, historical bars and a few key
+    stats. US financial statements are *not* exposed by akshare, so those
+    methods return empty (noted) results and valuation tools degrade to N/A.
+    """
+
+    SOURCE = "akshare/eastmoney"
+    NOTE = "US stock data via akshare (Eastmoney); ~15 min delayed, not real-time."
+
+    def __init__(self) -> None:
+        self._spot_cache: Any = None
+
+    def _ak(self) -> Any:
+        try:
+            import akshare  # noqa: PLC0415
+        except ImportError as exc:
+            raise RuntimeError(
+                "akshare is not installed. Install it with: pip install -e '.[real-data]'"
+            ) from exc
+        return akshare
+
+    def _spot(self) -> Any:
+        if self._spot_cache is None:
+            df = self._ak().stock_us_spot_em()
+            if df is None or getattr(df, "empty", True):
+                raise ValueError("akshare returned no US stock spot data")
+            self._spot_cache = df
+        return self._spot_cache
+
+    def _resolve(self, ticker: str) -> tuple[str, Any]:
+        symbol = ticker.upper().strip()
+        df = self._spot()
+        codes = df["代码"].astype(str).str.upper()
+        mask = codes.str.endswith("." + symbol) | codes.eq(symbol)
+        rows = df[mask]
+        if rows.empty:
+            raise ValueError(f"Ticker {symbol!r} not found in akshare US stock list")
+        return str(rows.iloc[0]["代码"]), rows.iloc[0]
+
+    @staticmethod
+    def _period_start(period: str) -> str:
+        days = {
+            "1d": 1,
+            "5d": 5,
+            "1mo": 30,
+            "3mo": 90,
+            "6mo": 180,
+            "1y": 365,
+            "2y": 730,
+            "5y": 1825,
+        }.get(period, 180)
+        return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y%m%d")
+
+    @staticmethod
+    def _interval_to_period(interval: str) -> str:
+        return {"1wk": "weekly", "1mo": "monthly"}.get(interval, "daily")
+
+    def get_stock_price(self, ticker: str) -> StockPriceResult:
+        symbol = ticker.upper().strip()
+        _, row = self._resolve(symbol)
+        price = _as_float(row.get("最新价"))
+        if price is None:
+            raise ValueError(f"No price found for ticker {symbol!r}")
+        return StockPriceResult(
+            ticker=symbol,
+            price=round(price, 2),
+            currency="USD",
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            data_period="latest (delayed)",
+            note=self.NOTE,
+        )
+
+    def get_historical_prices(
+        self, ticker: str, period: str, interval: str
+    ) -> HistoricalPricesResult:
+        symbol = ticker.upper().strip()
+        code, _ = self._resolve(symbol)
+        df = self._ak().stock_us_hist(
+            symbol=code,
+            period=self._interval_to_period(interval),
+            start_date=self._period_start(period),
+            end_date=datetime.now(timezone.utc).strftime("%Y%m%d"),
+            adjust="qfq",
+        )
+        if df is None or getattr(df, "empty", True):
+            raise ValueError(f"No historical data found for ticker {symbol!r}")
+        bars: list[PriceBar] = []
+        for _, row in df.iterrows():
+            volume = _as_float(row.get("成交量")) or 0
+            bars.append(
+                PriceBar(
+                    date=str(row.get("日期"))[:10],
+                    open=float(_as_float(row.get("开盘")) or 0.0),
+                    high=float(_as_float(row.get("最高")) or 0.0),
+                    low=float(_as_float(row.get("最低")) or 0.0),
+                    close=float(_as_float(row.get("收盘")) or 0.0),
+                    volume=int(volume),
+                )
+            )
+        return HistoricalPricesResult(
+            ticker=symbol,
+            period=period,
+            interval=interval,
+            bars=bars,
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            data_period=period,
+            note=self.NOTE,
+        )
+
+    def get_key_stats(self, ticker: str) -> KeyStats:
+        symbol = ticker.upper().strip()
+        _, row = self._resolve(symbol)
+        price = _as_float(row.get("最新价"))
+        market_cap = _as_float(row.get("总市值"))
+        pe = _as_float(row.get("市盈率"))
+        eps = round(price / pe, 2) if (price and pe and pe > 0) else None
+        shares = round(market_cap / price, 0) if (market_cap and price) else None
+        return KeyStats(
+            ticker=symbol,
+            eps_ttm=eps,
+            shares_outstanding=shares,
+            market_cap=market_cap,
+            beta=None,
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            note=self.NOTE,
+        )
+
+    def get_income_statement(self, ticker: str) -> IncomeStatement:
+        return IncomeStatement(
+            ticker=ticker.upper().strip(),
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            note="US income statement not available via akshare.",
+        )
+
+    def get_balance_sheet(self, ticker: str) -> BalanceSheet:
+        return BalanceSheet(
+            ticker=ticker.upper().strip(),
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            note="US balance sheet not available via akshare.",
+        )
+
+    def get_cash_flow(self, ticker: str) -> CashFlow:
+        return CashFlow(
+            ticker=ticker.upper().strip(),
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            note="US cash flow not available via akshare.",
+        )
+
+    def search_company_news(self, ticker: str, query: str, limit: int) -> NewsResult:
+        return NewsResult(
+            ticker=ticker.upper().strip(),
+            query=query or "",
+            items=[],
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            note="Company news not available via akshare.",
+        )
+
+    def search_market_news(self, query: str, limit: int) -> NewsResult:
+        return NewsResult(
+            ticker="MARKET",
+            query=query or "",
+            items=[],
+            source=self.SOURCE,
+            timestamp=utc_now(),
+            note="Market news not available via akshare.",
+        )
+
+
 def get_data_provider(provider: str | None = None) -> MarketDataProvider:
     """Resolve the active data provider from an argument or environment."""
     name = (provider or os.getenv("STOCKMIND_DATA_PROVIDER") or "mock").strip().lower()
@@ -610,4 +787,6 @@ def get_data_provider(provider: str | None = None) -> MarketDataProvider:
         return MockMarketDataProvider()
     if name == "yfinance":
         return YFinanceMarketDataProvider()
-    raise ValueError(f"Unsupported data provider: {name!r} (expected 'mock' or 'yfinance')")
+    if name == "akshare":
+        return AkShareMarketDataProvider()
+    raise ValueError(f"Unsupported data provider: {name!r} (expected 'mock', 'yfinance' or 'akshare')")

@@ -41,7 +41,7 @@ Pydantic 与 Python 构建。目标不是做一个「股票聊天机器人」，
 | LLM（`app/models`、`app/agents/prompts`） | 推理、工具选择、解读、总结 |
 | 工具（`app/tools`） | 数据获取 + 确定性计算 |
 | 分析（`app/tools/analysis.py`） | 无副作用、纯函数的财务/技术数学计算 |
-| 数据源（`app/tools/providers.py`） | 原始数据获取（mock + yfinance） |
+| 数据源（`app/tools/providers.py`） | 原始数据获取（mock + yfinance + akshare） |
 | 报告组装（`app/reporting`） | 确定性、基于证据的报告兜底 |
 | LangGraph（`app/graph`） | 状态、控制流、迭代/终止逻辑 |
 | Pydantic（`app/schemas`） | 结构化数据契约 |
@@ -86,7 +86,7 @@ app/
 ├── tools/
 │   ├── base.py             # 溯源 + 指标序列化
 │   ├── analysis.py         # 纯确定性计算
-│   ├── providers.py        # MarketDataProvider（mock + yfinance）
+│   ├── providers.py        # MarketDataProvider（mock + yfinance + akshare）
 │   ├── market.py           # 价格 + 历史工具
 │   ├── financial.py        # 财务报表工具
 │   ├── news.py             # 公司 + 市场新闻工具
@@ -148,7 +148,9 @@ python examples/research.py --tickers AAPL --lang en
 * 设置了 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY` 时，由真实 LLM 驱动每一次循环。
 * 未设置 key 时，由离线脚本化演示模型驱动完整工具链，支持任意股票与语言。
 * 数据默认使用确定性的 `mock` 数据源，并**明确标注为模拟数据**。设置
-  `STOCKMIND_DATA_PROVIDER=yfinance` 可获取真实数据（需要网络 + 可选依赖）。
+  `STOCKMIND_DATA_PROVIDER=yfinance`（Yahoo）或 `STOCKMIND_DATA_PROVIDER=akshare`
+  （东方财富，国内友好、约 15 分钟延迟）可获取真实数据（需要网络 + 可选依赖）。
+  akshare 不提供美股财务报表，因此财务/估值字段会显示为 N/A。
 
 每份报告都会显示**精确的生成时间**（`generated_at`，ISO 8601 含时区），并生成
 价格/均线/成交量/RSI/MACD **图表**保存到 `charts/`（终端同时打印一条走势线）。
@@ -219,7 +221,7 @@ python -m promptlog export
 | --- | --- | --- |
 | `STOCKMIND_LLM_PROVIDER` | `openai` | `openai` 或 `anthropic` |
 | `STOCKMIND_LLM_MODEL` | `gpt-4o-mini` | 模型名 |
-| `STOCKMIND_DATA_PROVIDER` | `mock` | `mock` 或 `yfinance` |
+| `STOCKMIND_DATA_PROVIDER` | `mock` | `mock`、`yfinance` 或 `akshare` |
 | `STOCKMIND_LANGUAGE` | `en` | `en` 或 `zh` |
 | `STOCKMIND_MAX_ITERATIONS` | `8` | ReAct 迭代上限 |
 | `STOCKMIND_TOOL_TIMEOUT_SECONDS` | `15` | 单工具超时 |

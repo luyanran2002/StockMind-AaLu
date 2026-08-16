@@ -45,7 +45,7 @@ explicit and testable.
 | LLM (`app/models`, `app/agents/prompts`) | Reasoning, tool selection, interpretation, summarisation |
 | Tools (`app/tools`) | Data retrieval + deterministic computation |
 | Analysis (`app/tools/analysis.py`) | Pure, side-effect-free financial/technical math |
-| Providers (`app/tools/providers.py`) | Raw data retrieval (mock + yfinance) |
+| Providers (`app/tools/providers.py`) | Raw data retrieval (mock + yfinance + akshare) |
 | Report assembly (`app/reporting`) | Deterministic, evidence-grounded report fallback |
 | LangGraph (`app/graph`) | State, control flow, iteration/termination logic |
 | Pydantic (`app/schemas`) | Structured data contracts |
@@ -91,7 +91,7 @@ app/
 ├── tools/
 │   ├── base.py             # provenance + metric serialization
 │   ├── analysis.py         # pure deterministic computation
-│   ├── providers.py        # MarketDataProvider (mock + yfinance)
+│   ├── providers.py        # MarketDataProvider (mock + yfinance + akshare)
 │   ├── market.py           # price + historical tools
 │   ├── financial.py        # financial statement tools
 │   ├── news.py             # company + market news tools
@@ -154,8 +154,10 @@ python examples/research.py --tickers AAPL --lang en
 * Without a key, an offline scripted demo model drives the loop through the full
   tool set, for any ticker and language.
 * Data defaults to the deterministic `mock` provider, which is **clearly
-  labelled as simulated**. Set `STOCKMIND_DATA_PROVIDER=yfinance` to fetch real
-  data (requires network + optional dependency).
+  labelled as simulated**. Set `STOCKMIND_DATA_PROVIDER=yfinance` (Yahoo) or
+  `STOCKMIND_DATA_PROVIDER=akshare` (Eastmoney, China-friendly, ~15 min delayed)
+  to fetch real data (requires network + optional dependency). akshare does not
+  expose US financial statements, so financial/valuation fields show as N/A.
 
 Each report shows a **precise generation time** (`generated_at`, ISO 8601 with
 timezone), and a price/MA/volume/RSI/MACD **chart** is saved to `charts/` (a
@@ -227,7 +229,7 @@ See [.env.example](.env.example). Key variables:
 | --- | --- | --- |
 | `STOCKMIND_LLM_PROVIDER` | `openai` | `openai` or `anthropic` |
 | `STOCKMIND_LLM_MODEL` | `gpt-4o-mini` | model name |
-| `STOCKMIND_DATA_PROVIDER` | `mock` | `mock` or `yfinance` |
+| `STOCKMIND_DATA_PROVIDER` | `mock` | `mock`, `yfinance` or `akshare` |
 | `STOCKMIND_LANGUAGE` | `en` | `en` or `zh` |
 | `STOCKMIND_MAX_ITERATIONS` | `8` | ReAct iteration cap |
 | `STOCKMIND_TOOL_TIMEOUT_SECONDS` | `15` | per-tool timeout |
