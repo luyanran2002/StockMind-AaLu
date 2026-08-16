@@ -446,18 +446,29 @@ class YFinanceMarketDataProvider(MarketDataProvider):
     def get_stock_price(self, ticker: str) -> StockPriceResult:
         symbol = ticker.upper().strip()
         t = self._yf().Ticker(symbol)
-        info = t.info or {}
-        price = (
-            info.get("regularMarketPrice")
-            or info.get("currentPrice")
-            or info.get("previousClose")
-        )
+        price = None
+        currency = "USD"
+        # fast_info hits a single, lighter endpoint and is usually more reliable.
+        try:
+            fast = t.fast_info
+            price = fast.last_price
+            currency = fast.currency or "USD"
+        except Exception:
+            price = None
+        if price is None:
+            info = t.info or {}
+            price = (
+                info.get("regularMarketPrice")
+                or info.get("currentPrice")
+                or info.get("previousClose")
+            )
+            currency = info.get("currency", "USD")
         if price is None:
             raise ValueError(f"No price found for ticker {symbol!r}")
         return StockPriceResult(
             ticker=symbol,
             price=float(price),
-            currency=info.get("currency", "USD"),
+            currency=currency,
             source=self.SOURCE,
             timestamp=utc_now(),
             data_period="latest close",
