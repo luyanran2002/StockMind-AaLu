@@ -6,8 +6,10 @@ __pycache__/
 .ruff_cache/
 .env
 trace_logs/
+checkpoints/
+*.sqlite
+*.db
 *.egg-info/
 build/
 dist/
 .DS_Store
-

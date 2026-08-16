@@ -74,7 +74,8 @@ app/
 │   └── prompts.py          # 支持多语言的提示词
 ├── graph/
 │   ├── state.py            # StockAgentState（TypedDict）
-│   └── workflow.py         # LangGraph ReAct 循环
+│   ├── workflow.py         # 异步 LangGraph ReAct 循环
+│   └── checkpoint.py       # memory + SQLite checkpointer
 ├── models/
 │   ├── providers.py        # OpenAI / Anthropic 抽象
 │   └── demo.py             # 离线脚本化演示模型
@@ -95,6 +96,7 @@ tests/
 examples/
     research.py             # 多股票、双语 CLI
     nvda_research.py        # NVDA 快速演示
+    async_research.py       # 异步 + checkpoint 续跑演示
 promptlog/
     __main__.py             # prompt 记录 CLI
     journal.py              # 存储与渲染
@@ -150,6 +152,41 @@ pytest
 
 ---
 
+## 异步与 checkpoint
+
+Agent 以异步为优先；同步的 `run`/`invoke` 只是 `arun`/`ainvoke` 的薄封装。
+
+```python
+import asyncio
+from app.agents.react_agent import StockMindAgent
+
+async def main():
+    agent = StockMindAgent()  # 默认使用 InMemorySaver
+    report = await agent.ainvoke("分析 NVDA", ticker="NVDA", thread_id="run-1")
+    snapshot = await agent.aget_state("run-1")  # 读取已持久化的 checkpoint
+
+asyncio.run(main())
+```
+
+SQLite 持久化（跨进程可恢复）：
+
+```python
+from app.graph.checkpoint import build_checkpointer
+
+async with build_checkpointer("sqlite", "checkpoints.sqlite") as saver:
+    agent = StockMindAgent(checkpointer=saver)
+    await agent.ainvoke("分析 NVDA", ticker="NVDA", thread_id="run-1")
+    await agent.ainvoke("还有什么补充吗？", ticker="NVDA", thread_id="run-1")  # 续跑
+```
+
+运行内置演示：
+
+```bash
+python examples/async_research.py --ticker NVDA --lang zh
+```
+
+---
+
 ## Prompt 记录
 
 独立的 prompt 记录框架位于 [`promptlog/`](promptlog/)：
@@ -177,6 +214,9 @@ python -m promptlog export
 | `STOCKMIND_MAX_ITERATIONS` | `8` | ReAct 迭代上限 |
 | `STOCKMIND_TOOL_TIMEOUT_SECONDS` | `15` | 单工具超时 |
 | `STOCKMIND_TOOL_RETRIES` | `1` | 工具失败后的重试次数 |
+| `STOCKMIND_RETRY_BACKOFF_SECONDS` | `0.5` | 工具重试的初始退避时间 |
+| `STOCKMIND_RETRY_MAX_BACKOFF_SECONDS` | `8` | 工具重试的最大退避时间 |
+| `STOCKMIND_RETRY_JITTER` | `0.1` | 退避抖动比例 |
 | `STOCKMIND_TRACE_DIR` | *(空)* | JSONL 追踪输出目录 |
 
 API key 由底层 SDK 从环境变量读取，绝不写入代码。
@@ -189,7 +229,7 @@ API key 由底层 SDK 从环境变量读取，绝不写入代码。
   `messages` 使用 LangGraph 的 `add_messages` reducer 正确累积。
 * **数据获取与计算分离** — 数据源获取原始数据；`analysis.py` 中的纯函数负责计算；
   工具把两者组合起来。LLM 只做解读。
-* **可靠性保障** — `max_iterations`、单工具超时（线程池）、重试策略、重复工具调用
+* **可靠性保障** — `max_iterations`、单工具超时（`asyncio.wait_for`）、重试策略、重复工具调用
   检测与优雅降级：失败的工具会变成一条错误观察，而不会导致崩溃。
 * **结构化输出 + 兜底** — `finalize` 优先使用
   `llm.with_structured_output(StockResearchReport)`，其次尝试 JSON 解析，最后退化为
@@ -204,6 +244,6 @@ API key 由底层 SDK 从环境变量读取，绝不写入代码。
 
 - [x] **Phase 1** — ReAct 循环 + 市场/新闻工具。
 - [x] **Phase 2** — 财务、技术面、新闻与估值工具。
-- [ ] **Phase 3** — 异步执行、检查点、重试/退避加固。
+- [x] **Phase 3** — 异步执行、检查点、重试/退避加固。
 - [ ] **Phase 4** — 更丰富的追踪、评估数据集、成本统计。
 - [ ] **Phase 5** — 历史评估 / 信号回测。

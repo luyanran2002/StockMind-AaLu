@@ -79,7 +79,8 @@ app/
 │   └── prompts.py          # language-aware prompts
 ├── graph/
 │   ├── state.py            # StockAgentState (TypedDict)
-│   └── workflow.py         # LangGraph ReAct loop
+│   ├── workflow.py         # async LangGraph ReAct loop
+│   └── checkpoint.py       # memory + SQLite checkpointer
 ├── models/
 │   ├── providers.py        # OpenAI / Anthropic abstraction
 │   └── demo.py             # offline scripted demo model
@@ -100,6 +101,7 @@ tests/
 examples/
     research.py             # multi-stock, bilingual CLI
     nvda_research.py        # quick NVDA demo
+    async_research.py       # async + checkpoint resume demo
 promptlog/
     __main__.py             # prompt journal CLI
     journal.py              # storage + rendering
@@ -157,6 +159,42 @@ pytest
 
 ---
 
+## Async & checkpointing
+
+The agent is async-first; sync `run`/`invoke` are thin wrappers over `arun`/
+`ainvoke`.
+
+```python
+import asyncio
+from app.agents.react_agent import StockMindAgent
+
+async def main():
+    agent = StockMindAgent()  # InMemorySaver by default
+    report = await agent.ainvoke("Analyze NVDA", ticker="NVDA", thread_id="run-1")
+    snapshot = await agent.aget_state("run-1")  # read persisted checkpoint
+
+asyncio.run(main())
+```
+
+SQLite persistence (resumable across processes):
+
+```python
+from app.graph.checkpoint import build_checkpointer
+
+async with build_checkpointer("sqlite", "checkpoints.sqlite") as saver:
+    agent = StockMindAgent(checkpointer=saver)
+    await agent.ainvoke("Analyze NVDA", ticker="NVDA", thread_id="run-1")
+    await agent.ainvoke("Follow-up?", ticker="NVDA", thread_id="run-1")  # resumes
+```
+
+Run the bundled demo:
+
+```bash
+python examples/async_research.py --ticker NVDA --lang en
+```
+
+---
+
 ## Prompt journal
 
 A standalone prompt recorder lives in [`promptlog/`](promptlog/):
@@ -184,6 +222,9 @@ See [.env.example](.env.example). Key variables:
 | `STOCKMIND_MAX_ITERATIONS` | `8` | ReAct iteration cap |
 | `STOCKMIND_TOOL_TIMEOUT_SECONDS` | `15` | per-tool timeout |
 | `STOCKMIND_TOOL_RETRIES` | `1` | retries after a tool failure |
+| `STOCKMIND_RETRY_BACKOFF_SECONDS` | `0.5` | initial backoff for tool retries |
+| `STOCKMIND_RETRY_MAX_BACKOFF_SECONDS` | `8` | max backoff for tool retries |
+| `STOCKMIND_RETRY_JITTER` | `0.1` | jitter fraction for backoff |
 | `STOCKMIND_TRACE_DIR` | *(empty)* | JSONL trace output directory |
 
 API keys are read from the environment by the underlying SDKs and are never
@@ -197,7 +238,7 @@ stored in code.
   `messages` uses LangGraph's `add_messages` reducer for correct accumulation.
 * **Data retrieval vs. computation** — providers fetch raw data; pure functions
   in `analysis.py` do the math; tools compose the two. The LLM only interprets.
-* **Reliability guards** — `max_iterations`, per-tool timeout (thread pool),
+* **Reliability guards** — `max_iterations`, per-tool timeout (`asyncio.wait_for`),
   retry policy, duplicate-tool-call detection, and graceful degradation: a
   failed tool becomes an error observation, never a crash.
 * **Structured output with fallback** — `finalize` prefers
@@ -215,6 +256,6 @@ stored in code.
 
 - [x] **Phase 1** — ReAct loop + market/news tools.
 - [x] **Phase 2** — financial, technical, news and valuation tools.
-- [ ] **Phase 3** — async execution, checkpointing, retries/backoff hardening.
+- [x] **Phase 3** — async execution, checkpointing, retries/backoff hardening.
 - [ ] **Phase 4** — richer tracing, evaluation datasets, cost tracking.
 - [ ] **Phase 5** — historical evaluation / backtesting of signals.

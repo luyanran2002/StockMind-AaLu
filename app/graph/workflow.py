@@ -1,20 +1,23 @@
-"""The LangGraph ReAct execution loop.
+"""The LangGraph ReAct execution loop (async-first).
 
 Nodes:
   agent     -> LLM reasons and either emits tool calls or a final answer.
-  tools     -> Executes tool calls with timeout, retry and duplicate detection.
+  tools     -> Executes tool calls concurrently with timeout + retry + backoff.
   finalize  -> Produces a validated :class:`StockResearchReport`.
 
 The loop is bounded by ``max_iterations``. Tool failures are recorded as
-observations rather than crashing the run (graceful degradation).
+observations rather than crashing the run (graceful degradation). The graph is
+compiled with a checkpointer so runs can be persisted and resumed by
+``thread_id``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import random
 import time
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -37,6 +40,9 @@ class AgentConfig:
     max_iterations: int = 8
     tool_timeout_seconds: float = 15.0
     tool_retries: int = 1
+    retry_backoff_seconds: float = 0.5
+    retry_max_backoff_seconds: float = 8.0
+    retry_jitter: float = 0.1
     language: str = "en"
 
 
@@ -74,6 +80,13 @@ def _build_agent_messages(state: StockAgentState, language: str) -> list[BaseMes
     return [SystemMessage(content=get_system_prompt(language)), *list(state.get("messages", []))]
 
 
+def _backoff_delay(attempt: int, config: AgentConfig) -> float:
+    """Exponential backoff with jitter for the ``attempt``-th retry."""
+    base = config.retry_backoff_seconds * (2 ** attempt)
+    capped = min(base, config.retry_max_backoff_seconds)
+    return capped + random.uniform(0.0, config.retry_jitter * capped)
+
+
 def _make_agent_node(
     llm: BaseChatModel,
     tools: list[BaseTool],
@@ -87,7 +100,7 @@ def _make_agent_node(
     except NotImplementedError:
         llm_with_tools = llm
 
-    def agent_node(state: StockAgentState) -> dict[str, Any]:
+    async def agent_node(state: StockAgentState) -> dict[str, Any]:
         iteration = state.get("iteration_count", 0) + 1
         updates: dict[str, Any] = {"iteration_count": iteration}
 
@@ -110,7 +123,7 @@ def _make_agent_node(
 
         start = time.perf_counter()
         try:
-            response = llm_with_tools.invoke(_build_agent_messages(state, config.language))
+            response = await llm_with_tools.ainvoke(_build_agent_messages(state, config.language))
             latency_ms = (time.perf_counter() - start) * 1000.0
         except Exception as exc:  # LLM outage -> degrade gracefully
             error = f"{type(exc).__name__}: {exc}"
@@ -155,10 +168,8 @@ def _make_agent_node(
     return agent_node
 
 
-def _invoke_tool_with_timeout(tool: BaseTool, args: dict[str, Any], timeout_seconds: float) -> Any:
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(tool.invoke, args)
-        return future.result(timeout=timeout_seconds)
+async def _ainvoke_tool_with_timeout(tool: BaseTool, args: dict[str, Any], timeout_seconds: float) -> Any:
+    return await asyncio.wait_for(tool.ainvoke(args), timeout=timeout_seconds)
 
 
 def _make_tools_node(
@@ -168,14 +179,14 @@ def _make_tools_node(
 ):
     tool_map = {tool.name: tool for tool in tools}
 
-    def _run_with_retry(
+    async def _run_tool_with_retry(
         tool: BaseTool, args: dict[str, Any], agent_step: int
     ) -> tuple[str | None, str | None]:
         last_error: str | None = None
         for attempt in range(config.tool_retries + 1):
             start = time.perf_counter()
             try:
-                raw = _invoke_tool_with_timeout(tool, args, config.tool_timeout_seconds)
+                raw = await _ainvoke_tool_with_timeout(tool, args, config.tool_timeout_seconds)
                 output = _stringify(raw)
                 tracer.record(
                     event_type="tool_call",
@@ -196,6 +207,8 @@ def _make_tools_node(
                     latency_ms=(time.perf_counter() - start) * 1000.0,
                     error=last_error,
                 )
+                if attempt < config.tool_retries:
+                    await asyncio.sleep(_backoff_delay(attempt, config))
         tracer.record(
             event_type="tool_result",
             agent_step=agent_step,
@@ -204,7 +217,7 @@ def _make_tools_node(
         )
         return None, last_error
 
-    def tools_node(state: StockAgentState) -> dict[str, Any]:
+    async def tools_node(state: StockAgentState) -> dict[str, Any]:
         last = state.get("messages", [])[-1] if state.get("messages") else None
         calls = getattr(last, "tool_calls", None) or []
         agent_step = state.get("iteration_count", 0)
@@ -214,6 +227,10 @@ def _make_tools_node(
         errors: list[str] = []
         new_signatures: list[str] = []
         new_tool_calls: list[dict[str, Any]] = []
+        existing_signatures = set(state.get("tool_call_signatures", []))
+
+        # Jobs that actually need to be executed (concurrently).
+        jobs: list[tuple[str, str, BaseTool, dict[str, Any]]] = []
 
         for call in calls:
             name = call.get("name", "")
@@ -222,7 +239,7 @@ def _make_tools_node(
             signature = tool_call_signature(name, args)
             new_tool_calls.append({"name": name, "args": args, "id": call_id, "step": agent_step})
 
-            if signature in state.get("tool_call_signatures", []):
+            if signature in existing_signatures:
                 tool_messages.append(
                     ToolMessage(
                         content=json.dumps(
@@ -244,7 +261,13 @@ def _make_tools_node(
                 )
                 continue
 
-            output, error = _run_with_retry(tool, args, agent_step)
+            jobs.append((call_id, name, tool, args))
+
+        results = await asyncio.gather(
+            *(_run_tool_with_retry(tool, args, agent_step) for _, _, tool, args in jobs)
+        )
+
+        for (call_id, name, _, args), (output, error) in zip(jobs, results):
             if error:
                 errors.append(error)
                 tool_messages.append(
@@ -304,7 +327,7 @@ def _fallback_report(ticker: str, text: str, note: str) -> StockResearchReport:
     )
 
 
-def _generate_report(
+async def _generate_report(
     llm: BaseChatModel, state: StockAgentState, tracer: TraceCollector
 ) -> StockResearchReport:
     ticker = _infer_ticker(state)
@@ -319,7 +342,7 @@ def _generate_report(
             *list(state.get("messages", [])),
             HumanMessage(content=f"Final reasoning so far:\n{final_report}"),
         ]
-        report = structured_llm.invoke(messages)
+        report = await structured_llm.ainvoke(messages)
         if not isinstance(report, StockResearchReport):
             raise TypeError(f"Structured output returned {type(report).__name__}, not StockResearchReport")
         report = report.model_copy(update={"ticker": report.ticker or ticker})
@@ -354,8 +377,8 @@ def _generate_report(
 
 
 def _make_finalize_node(llm: BaseChatModel, tracer: TraceCollector):
-    def finalize_node(state: StockAgentState) -> dict[str, Any]:
-        report = _generate_report(llm, state, tracer)
+    async def finalize_node(state: StockAgentState) -> dict[str, Any]:
+        report = await _generate_report(llm, state, tracer)
         return {"final_output": report, "status": "finished"}
 
     return finalize_node
@@ -372,8 +395,9 @@ def build_agent_graph(
     tools: list[BaseTool],
     config: AgentConfig | None = None,
     tracer: TraceCollector | None = None,
+    checkpointer: Any | None = None,
 ):
-    """Compile the Phase 1 ReAct graph."""
+    """Compile the Phase 3 async ReAct graph."""
     config = config or AgentConfig()
     tracer = tracer or TraceCollector()
 
@@ -391,4 +415,5 @@ def build_agent_graph(
     graph.add_edge("tools", "agent")
     graph.add_edge("finalize", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
+
