@@ -12,6 +12,7 @@ import json
 from typing import Any
 
 from app.schemas.report import StockResearchReport
+from app.tools.analysis import project_linear_trend
 
 
 def _load(obs: dict[str, Any]) -> dict[str, Any]:
@@ -78,6 +79,8 @@ def build_grounded_report(state: dict[str, Any], language: str = "en") -> StockR
     first, last = (closes[0], closes[-1]) if closes else (None, None)
     change = (last - first) / first if (first and last) else None
     hi, lo = (max(closes), min(closes)) if closes else (None, None)
+    projection = project_linear_trend(closes, horizon=20) if closes else []
+    projected_price = projection[-1] if projection else None
 
     price_v = price.get("price")
     currency = price.get("currency", "USD")
@@ -115,6 +118,8 @@ def build_grounded_report(state: dict[str, Any], language: str = "en") -> StockR
         "annualized_volatility": vol_v,
         "max_drawdown": dd_v.get("max_drawdown"),
         "dcf_intrinsic_value": dcf_v.get("intrinsic_value_per_share"),
+        "linear_extrapolation_20d": projected_price,
+        "linear_extrapolation_note": "naive linear extrapolation, not a prediction",
         "data_sources": sources,
     }
 
@@ -145,6 +150,7 @@ def build_grounded_report(state: dict[str, Any], language: str = "en") -> StockR
             technical_analysis=(
                 f"RSI {_num(rsi_v, 1)}，均线 MA {_num(ma_v)}，"
                 f"MACD {_num(macd_v.get('macd'), 3)}/信号 {_num(macd_v.get('signal'), 3)}。"
+                f"朴素线性外推（非预测）：20 日后约 {_num(projected_price)}。"
                 f"（来源：{_source(rsi)}）"
             ),
             news_analysis=(
@@ -203,6 +209,7 @@ def build_grounded_report(state: dict[str, Any], language: str = "en") -> StockR
         technical_analysis=(
             f"RSI {_num(rsi_v, 1)}, moving average {_num(ma_v)}, "
             f"MACD {_num(macd_v.get('macd'), 3)}/signal {_num(macd_v.get('signal'), 3)}. "
+            f"Naive linear extrapolation (not a prediction): ~{_num(projected_price)} in 20 sessions. "
             f"(source: {_source(rsi)})"
         ),
         news_analysis=(
@@ -238,4 +245,3 @@ def build_grounded_report(state: dict[str, Any], language: str = "en") -> StockR
             "tolerance and real data; simulated data is for workflow demonstration only."
         ),
     )
-

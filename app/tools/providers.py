@@ -691,36 +691,107 @@ class AkShareMarketDataProvider(MarketDataProvider):
             note=self.NOTE,
         )
 
+    def _report_map(self, ticker: str, statement: str) -> dict[str, float | None]:
+        """Latest annual report as ``{ITEM_NAME: AMOUNT}`` (best-effort)."""
+        try:
+            df = self._ak().stock_financial_us_report_em(
+                stock=ticker.upper().strip(), symbol=statement, indicator="年报"
+            )
+        except Exception:
+            return {}
+        if df is None or getattr(df, "empty", True):
+            return {}
+        latest = df["REPORT_DATE"].max()
+        sub = df[df["REPORT_DATE"] == latest]
+        return {str(row["ITEM_NAME"]): _as_float(row["AMOUNT"]) for _, row in sub.iterrows()}
+
+    @staticmethod
+    def _find(items: dict[str, float | None], *keywords: str) -> float | None:
+        for name, value in items.items():
+            if value is not None and any(keyword in name for keyword in keywords):
+                return value
+        return None
+
+    def _valuation_latest(self, ticker: str, indicator: str) -> float | None:
+        try:
+            df = self._ak().stock_us_valuation_baidu(
+                symbol=ticker.upper().strip(), indicator=indicator, period="近一年"
+            )
+            if df is not None and not getattr(df, "empty", True):
+                return _as_float(df["value"].iloc[-1])
+        except Exception:
+            return None
+        return None
+
     def get_key_stats(self, ticker: str) -> KeyStats:
+        symbol = ticker.upper().strip()
+        price = self.get_stock_price(symbol).price
+        market_cap = self._valuation_latest(symbol, "总市值")
+        pe = self._valuation_latest(symbol, "市盈率(TTM)")
+        eps = round(price / pe, 2) if (price and pe and pe > 0) else None
+        shares = round(market_cap / price, 0) if (market_cap and price) else None
         return KeyStats(
-            ticker=ticker.upper().strip(),
+            ticker=symbol,
+            eps_ttm=eps,
+            shares_outstanding=shares,
+            market_cap=market_cap,
+            beta=None,
             source=self.SOURCE,
             timestamp=utc_now(),
-            note="Market cap / EPS not available via akshare daily endpoint.",
+            note="Market cap / PE via Baidu; EPS/shares derived from price.",
         )
 
     def get_income_statement(self, ticker: str) -> IncomeStatement:
+        symbol = ticker.upper().strip()
+        items = self._report_map(symbol, "综合损益表")
         return IncomeStatement(
-            ticker=ticker.upper().strip(),
+            ticker=symbol,
+            period="annual",
+            revenue=self._find(items, "营业总收入", "营业收入", "总收入"),
+            gross_profit=self._find(items, "毛利"),
+            operating_income=self._find(items, "营业利润"),
+            ebitda=self._find(items, "EBITDA", "息税折旧摊销前利润"),
+            net_income=self._find(items, "归母净利润", "净利润"),
+            eps_diluted=self._find(items, "稀释每股收益", "基本每股收益", "每股收益"),
             source=self.SOURCE,
             timestamp=utc_now(),
-            note="US income statement not available via akshare.",
+            note="Parsed from Eastmoney income statement (latest annual, best-effort).",
         )
 
     def get_balance_sheet(self, ticker: str) -> BalanceSheet:
+        symbol = ticker.upper().strip()
+        items = self._report_map(symbol, "资产负债表")
         return BalanceSheet(
-            ticker=ticker.upper().strip(),
+            ticker=symbol,
+            total_assets=self._find(items, "资产总计", "资产合计"),
+            total_liabilities=self._find(items, "负债合计", "负债总计"),
+            total_debt=self._find(items, "总债务", "债务合计", "长期债务", "短期债务"),
+            cash_and_equivalents=self._find(items, "现金及现金等价物", "货币资金"),
+            total_equity=self._find(items, "股东权益合计", "所有者权益合计"),
             source=self.SOURCE,
             timestamp=utc_now(),
-            note="US balance sheet not available via akshare.",
+            note="Parsed from Eastmoney balance sheet (latest annual, best-effort).",
         )
 
     def get_cash_flow(self, ticker: str) -> CashFlow:
+        symbol = ticker.upper().strip()
+        items = self._report_map(symbol, "现金流量表")
+        ocf = self._find(items, "经营活动产生的现金流量净额", "经营活动现金流量净额")
+        capex = self._find(items, "购建固定资产", "资本支出")
+        investing = self._find(items, "投资活动产生的现金流量净额", "投资活动现金流量净额")
+        financing = self._find(items, "筹资活动产生的现金流量净额", "筹资活动现金流量净额")
+        fcf = self._find(items, "自由现金流")
+        if fcf is None and ocf is not None and capex is not None:
+            fcf = ocf - abs(capex)
         return CashFlow(
-            ticker=ticker.upper().strip(),
+            ticker=symbol,
+            operating_cash_flow=ocf,
+            investing_cash_flow=investing,
+            financing_cash_flow=financing,
+            free_cash_flow=fcf,
             source=self.SOURCE,
             timestamp=utc_now(),
-            note="US cash flow not available via akshare.",
+            note="Parsed from Eastmoney cash flow statement (latest annual, best-effort).",
         )
 
     def search_company_news(self, ticker: str, query: str, limit: int) -> NewsResult:

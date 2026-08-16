@@ -46,6 +46,12 @@ def test_compute_drawdown():
     assert result["current_drawdown"] == pytest.approx(0.0)
 
 
+def test_project_linear_trend():
+    projection = analysis.project_linear_trend([1.0, 2.0, 3.0, 4.0, 5.0], horizon=2)
+    assert projection == [pytest.approx(6.0), pytest.approx(7.0)]
+    assert analysis.project_linear_trend([1.0], horizon=2) == []
+
+
 def test_compute_pe():
     assert analysis.compute_pe(100.0, 10.0) == 10.0
     assert analysis.compute_pe(100.0, 0.0) is None

@@ -122,6 +122,26 @@ def compute_drawdown(closes: list[float]) -> dict[str, float] | None:
     return {"max_drawdown": round(max_dd, 6), "current_drawdown": round(current_dd, 6)}
 
 
+def project_linear_trend(
+    closes: list[float], horizon: int = 20, window: int | None = None
+) -> list[float]:
+    """Naive linear-regression extrapolation of recent closes.
+
+    This is a *statistical illustration*, not a prediction. Past price behaviour
+    does not predict future returns.
+    """
+    if len(closes) < 2 or horizon <= 0:
+        return []
+    data = closes[-window:] if window else closes
+    if len(data) < 2:
+        return []
+    x = np.arange(len(data), dtype=float)
+    y = np.asarray(data, dtype=float)
+    slope, intercept = np.polyfit(x, y, 1)
+    future_x = np.arange(len(data), len(data) + horizon, dtype=float)
+    return [round(float(intercept + slope * xi), 4) for xi in future_x]
+
+
 def compute_pe(price: float | None, eps: float | None) -> float | None:
     """Price / earnings. Returns None when EPS is missing or non-positive."""
     if price is None or eps is None or eps <= 0:

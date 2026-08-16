@@ -150,11 +150,11 @@ python examples/research.py --tickers AAPL --lang en
 * 数据默认使用确定性的 `mock` 数据源，并**明确标注为模拟数据**。设置
   `STOCKMIND_DATA_PROVIDER=yfinance`（Yahoo）或 `STOCKMIND_DATA_PROVIDER=akshare`
   （东方财富，国内友好、约 15 分钟延迟）可获取真实数据（需要网络 + 可选依赖）。
-  akshare 不提供美股财务报表，因此财务/估值字段会显示为 N/A。
+  akshare 的价格/历史来自新浪、财务报表来自东方财富、估值来自百度（尽力解析）。
 
 每份报告都会显示**精确的生成时间**（`generated_at`，ISO 8601 含时区），并生成
-价格/均线/成交量/RSI/MACD **图表**保存到 `charts/`（终端同时打印一条走势线）。
-图表使用 matplotlib 生成。
+价格/均线/成交量/RSI/MACD **图表**，并叠加一条**线性外推趋势线**（标注「非预测」）
+保存到 `charts/`（终端同时打印一条走势线）。图表使用 matplotlib 生成。
 
 ## 运行测试
 

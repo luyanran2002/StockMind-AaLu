@@ -9,9 +9,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
-from app.tools.analysis import compute_macd_series, compute_rsi_series
+from app.tools.analysis import compute_macd_series, compute_rsi_series, project_linear_trend
 from app.tools.providers import PriceBar
 
 _BLOCKS = "▁▂▃▄▅▆▇█"
@@ -38,6 +39,7 @@ def render_price_chart(
     *,
     language: str = "en",
     ma_windows: tuple[int, ...] = (20, 50),
+    forecast_horizon: int = 20,
     watermark: str | None = None,
 ) -> Path:
     """Render a multi-panel PNG chart (price/MA, volume, RSI, MACD)."""
@@ -67,6 +69,25 @@ def render_price_chart(
     for window in ma_windows:
         if len(closes) >= window:
             ax_price.plot(series.rolling(window).mean(), linewidth=1.0, label=f"MA{window}")
+    projection = project_linear_trend(closes, horizon=forecast_horizon)
+    if projection:
+        future_x = list(range(len(closes), len(closes) + len(projection)))
+        ax_price.plot(
+            future_x,
+            projection,
+            linestyle="--",
+            color="tab:orange",
+            linewidth=1.4,
+            label="Linear extrapolation (not a prediction)",
+        )
+        band = _projection_band(closes)
+        ax_price.fill_between(
+            future_x,
+            np.asarray(projection) - band,
+            np.asarray(projection) + band,
+            color="tab:orange",
+            alpha=0.15,
+        )
     ax_price.legend(loc="upper left", fontsize=8)
     ax_price.set_title(f"{ticker} — Research chart")
     ax_price.grid(alpha=0.25)
@@ -122,3 +143,13 @@ def render_price_chart(
     fig.savefig(output, dpi=120)
     plt.close(fig)
     return output
+
+
+def _projection_band(closes: list[float], window: int = 60) -> float:
+    """1-sigma residual band for the linear trend, used as a naive uncertainty."""
+    data = closes[-window:] if len(closes) > window else closes
+    x = np.arange(len(data), dtype=float)
+    y = np.asarray(data, dtype=float)
+    slope, intercept = np.polyfit(x, y, 1)
+    residuals = y - (intercept + slope * x)
+    return float(np.std(residuals))

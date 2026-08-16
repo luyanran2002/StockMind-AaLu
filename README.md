@@ -156,12 +156,15 @@ python examples/research.py --tickers AAPL --lang en
 * Data defaults to the deterministic `mock` provider, which is **clearly
   labelled as simulated**. Set `STOCKMIND_DATA_PROVIDER=yfinance` (Yahoo) or
   `STOCKMIND_DATA_PROVIDER=akshare` (Eastmoney, China-friendly, ~15 min delayed)
-  to fetch real data (requires network + optional dependency). akshare does not
-  expose US financial statements, so financial/valuation fields show as N/A.
+  to fetch real data (requires network + optional dependency). akshare pulls US
+  price/history from Sina, financial statements from Eastmoney and valuation
+  from Baidu (best-effort parsing).
 
 Each report shows a **precise generation time** (`generated_at`, ISO 8601 with
-timezone), and a price/MA/volume/RSI/MACD **chart** is saved to `charts/` (a
-terminal sparkline is also printed). The chart is generated with matplotlib.
+timezone), and a price/MA/volume/RSI/MACD **chart** with a dashed
+**linear-extrapolation trend** (labelled *not a prediction*) is saved to
+`charts/` (a terminal sparkline is also printed). The chart is generated with
+matplotlib.
 
 ## Run the tests
 
