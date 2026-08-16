@@ -74,6 +74,7 @@ from interpretation.
 
 ```
 app/
+├── utils.py                # time helpers
 ├── agents/
 │   ├── react_agent.py      # StockMindAgent facade
 │   └── prompts.py          # language-aware prompts
@@ -95,8 +96,10 @@ app/
 │   └── valuation.py        # valuation tools
 ├── observability/
 │   └── tracing.py          # TraceCollector
-└── schemas/
-    └── report.py           # StockResearchReport
+├── schemas/
+│   └── report.py           # StockResearchReport
+└── visualization/
+    └── charts.py           # terminal sparkline + PNG charts
 tests/
 examples/
     research.py             # multi-stock, bilingual CLI
@@ -150,6 +153,10 @@ python examples/research.py --tickers AAPL --lang en
 * Data defaults to the deterministic `mock` provider, which is **clearly
   labelled as simulated**. Set `STOCKMIND_DATA_PROVIDER=yfinance` to fetch real
   data (requires network + optional dependency).
+
+Each report shows a **precise generation time** (`generated_at`, ISO 8601 with
+timezone), and a price/MA/volume/RSI/MACD **chart** is saved to `charts/` (a
+terminal sparkline is also printed). The chart is generated with matplotlib.
 
 ## Run the tests
 

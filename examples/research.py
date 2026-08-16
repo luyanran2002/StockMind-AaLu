@@ -13,8 +13,10 @@ Run from the repository root:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -26,6 +28,11 @@ load_dotenv()
 from app.agents.react_agent import StockMindAgent
 from app.models.demo import build_demo_model
 from app.schemas.report import StockResearchReport
+from app.tools.providers import PriceBar
+from app.utils import format_local_time
+from app.visualization.charts import ascii_sparkline, render_price_chart
+
+CHARTS_DIR = Path(__file__).resolve().parents[1] / "charts"
 
 
 def _has_api_key() -> bool:
@@ -51,6 +58,7 @@ def _print_report(report: StockResearchReport, language: str) -> None:
     label = {
         "en": {
             "title": "STOCKMIND RESEARCH REPORT",
+            "generated_at": "GENERATED AT",
             "summary": "SUMMARY",
             "market": "MARKET ANALYSIS",
             "news": "NEWS ANALYSIS",
@@ -66,6 +74,7 @@ def _print_report(report: StockResearchReport, language: str) -> None:
         },
         "zh": {
             "title": "STOCKMIND 研究报告",
+            "generated_at": "生成时间",
             "summary": "摘要",
             "market": "市场分析",
             "news": "新闻分析",
@@ -84,6 +93,7 @@ def _print_report(report: StockResearchReport, language: str) -> None:
     print("=" * 70)
     print(f"{label['title']} — {report.ticker}")
     print("=" * 70)
+    print(f"{label['generated_at']}: {format_local_time(report.generated_at)}")
     print(f"\n{label['summary']}\n  {report.summary}")
     for key in ("market", "news", "financial", "technical", "valuation", "risk"):
         print(f"\n{label[key]}\n  {getattr(report, f'{key}_analysis')}")
@@ -103,6 +113,34 @@ def _print_report(report: StockResearchReport, language: str) -> None:
     print("=" * 70)
 
 
+def _extract_bars(state: dict) -> list[PriceBar]:
+    """Pull historical price bars out of the collected tool observations."""
+    for obs in reversed(state.get("observations", [])):
+        if obs.get("tool") != "get_historical_prices":
+            continue
+        try:
+            payload = json.loads(obs["result"])
+            return [PriceBar(**bar) for bar in payload.get("bars", [])]
+        except (TypeError, ValueError, KeyError):
+            continue
+    return []
+
+
+def _render_chart(state: dict, ticker: str, language: str) -> None:
+    bars = _extract_bars(state)
+    if not bars:
+        print("\n(no historical bars collected — chart skipped)")
+        return
+    closes = [bar.close for bar in bars]
+    print(f"\nPRICE TREND (last {len(closes)} bars)")
+    print(f"  {ascii_sparkline(closes)}")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    chart_path = render_price_chart(
+        bars, ticker, CHARTS_DIR / f"{ticker}_{stamp}.png", language=language
+    )
+    print(f"  Chart saved: {chart_path}")
+
+
 def run_ticker(ticker: str, language: str, query: str | None = None) -> None:
     symbol = ticker.upper()
     question = query or _default_query(symbol, language)
@@ -112,8 +150,10 @@ def run_ticker(ticker: str, language: str, query: str | None = None) -> None:
     else:
         agent = StockMindAgent(llm=build_demo_model(symbol, language), language=language)
 
-    report = agent.invoke(question, ticker=symbol)
+    state = agent.run(question, ticker=symbol)
+    report = state["final_output"]
     _print_report(report, language)
+    _render_chart(state, symbol, language)
 
     print("\n--- TRACE ---")
     print(agent.tracer.summarize())
@@ -144,4 +184,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

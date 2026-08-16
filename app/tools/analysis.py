@@ -37,6 +37,31 @@ def compute_rsi(closes: list[float], period: int = 14) -> float | None:
     return float(100 - 100 / (1 + rs))
 
 
+def compute_rsi_series(closes: list[float], period: int = 14) -> list[float | None]:
+    """Full RSI series (Wilder smoothing); ``None`` before enough history exists."""
+    n = len(closes)
+    result: list[float | None] = [None] * n
+    if n <= period or period <= 0:
+        return result
+    deltas = np.diff(np.asarray(closes, dtype=float))
+    gains = np.where(deltas > 0, deltas, 0.0)
+    losses = np.where(deltas < 0, -deltas, 0.0)
+    avg_gain = float(gains[:period].mean())
+    avg_loss = float(losses[:period].mean())
+
+    def _rsi(gain: float, loss: float) -> float:
+        if loss == 0:
+            return 100.0
+        return float(100 - 100 / (1 + gain / loss))
+
+    result[period] = _rsi(avg_gain, avg_loss)
+    for i in range(period, len(deltas)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        result[i + 1] = _rsi(avg_gain, avg_loss)
+    return result
+
+
 def _ema(values: list[float], span: int) -> list[float]:
     alpha = 2.0 / (span + 1.0)
     result = [values[0]]
@@ -60,6 +85,18 @@ def compute_macd(
         "signal": round(signal_line[-1], 6),
         "histogram": round(macd_line[-1] - signal_line[-1], 6),
     }
+
+
+def compute_macd_series(
+    closes: list[float], fast: int = 12, slow: int = 26, signal: int = 9
+) -> tuple[list[float], list[float], list[float]]:
+    """Full MACD line, signal line and histogram series."""
+    ema_fast = _ema(closes, fast)
+    ema_slow = _ema(closes, slow)
+    macd_line = [f - s for f, s in zip(ema_fast, ema_slow)]
+    signal_line = _ema(macd_line, signal)
+    histogram = [m - s for m, s in zip(macd_line, signal_line)]
+    return macd_line, signal_line, histogram
 
 
 def compute_annualized_volatility(closes: list[float], window: int | None = None) -> float | None:

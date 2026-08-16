@@ -69,6 +69,7 @@ LLM **不允许**自行计算数字（P/E、RSI、MACD、DCF、增长率、波�
 
 ```
 app/
+├── utils.py                # 时间工具
 ├── agents/
 │   ├── react_agent.py      # StockMindAgent 门面
 │   └── prompts.py          # 支持多语言的提示词
@@ -90,8 +91,10 @@ app/
 │   └── valuation.py        # 估值工具
 ├── observability/
 │   └── tracing.py          # TraceCollector
-└── schemas/
-    └── report.py           # StockResearchReport
+├── schemas/
+│   └── report.py           # StockResearchReport
+└── visualization/
+    └── charts.py           # 终端走势线 + PNG 图表
 tests/
 examples/
     research.py             # 多股票、双语 CLI
@@ -143,6 +146,10 @@ python examples/research.py --tickers AAPL --lang en
 * 未设置 key 时，由离线脚本化演示模型驱动完整工具链，支持任意股票与语言。
 * 数据默认使用确定性的 `mock` 数据源，并**明确标注为模拟数据**。设置
   `STOCKMIND_DATA_PROVIDER=yfinance` 可获取真实数据（需要网络 + 可选依赖）。
+
+每份报告都会显示**精确的生成时间**（`generated_at`，ISO 8601 含时区），并生成
+价格/均线/成交量/RSI/MACD **图表**保存到 `charts/`（终端同时打印一条走势线）。
+图表使用 matplotlib 生成。
 
 ## 运行测试
 

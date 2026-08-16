@@ -15,11 +15,25 @@ def test_compute_rsi_all_gains_is_100():
     assert analysis.compute_rsi(closes, period=14) == 100.0
 
 
+def test_compute_rsi_series_length_and_leading_none():
+    closes = list(range(1, 31))
+    series = analysis.compute_rsi_series(closes, period=14)
+    assert len(series) == len(closes)
+    assert all(v is None for v in series[:14])
+    assert all(v is not None for v in series[14:])
+
+
 def test_compute_macd_returns_structure():
     closes = [10 + i for i in range(50)]
     result = analysis.compute_macd(closes)
     assert set(result) == {"macd", "signal", "histogram"}
     assert result["histogram"] == pytest.approx(result["macd"] - result["signal"], abs=1e-6)
+
+
+def test_compute_macd_series_lengths():
+    closes = [10 + i for i in range(60)]
+    macd, signal, hist = analysis.compute_macd_series(closes)
+    assert len(macd) == len(signal) == len(hist) == len(closes)
 
 
 def test_compute_volatility_constant_series_is_zero():

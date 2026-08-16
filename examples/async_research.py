@@ -25,6 +25,7 @@ load_dotenv()
 from app.agents.react_agent import StockMindAgent
 from app.graph.checkpoint import build_checkpointer
 from app.models.demo import build_demo_model
+from app.utils import format_local_time
 
 CHECKPOINT_DB = Path(__file__).resolve().parents[1] / "checkpoints" / "checkpoints.sqlite"
 
@@ -48,7 +49,8 @@ async def main() -> None:
         report = await agent.ainvoke(
             f"Give me a research snapshot of {ticker}.", ticker=ticker, thread_id=thread_id
         )
-        print(f"[first run] {report.ticker} summary: {report.summary[:120]}...")
+        print(f"[first run] {report.ticker} generated_at={format_local_time(report.generated_at)}")
+        print(f"[first run] summary: {report.summary[:120]}...")
 
         snapshot = await agent.aget_state(thread_id)
         print(f"[checkpoint] status={snapshot.values['status']}  messages={len(snapshot.values['messages'])}")
@@ -62,4 +64,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

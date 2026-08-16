@@ -16,6 +16,10 @@ class StockResearchReport(BaseModel):
     """The canonical, structured output of a StockMind research run."""
 
     ticker: str = Field(..., description="Stock ticker symbol, e.g. NVDA")
+    generated_at: str | None = Field(
+        default=None,
+        description="Precise ISO 8601 timestamp (with timezone) when this report was generated",
+    )
     summary: str = Field(..., description="Concise executive summary of the research")
     market_analysis: str = Field(
         default="Not covered in this phase.",
@@ -50,4 +54,3 @@ class StockResearchReport(BaseModel):
         default_factory=list, description="Explicitly stated uncertainties and limitations"
     )
     conclusion: str = Field(..., description="Final assessment")
-

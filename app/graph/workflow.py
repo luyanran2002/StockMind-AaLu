@@ -50,6 +50,10 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _precise_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
 def _extract_token_usage(message: BaseMessage) -> dict[str, Any] | None:
     usage = getattr(message, "usage_metadata", None)
     if usage is None:
@@ -379,6 +383,7 @@ async def _generate_report(
 def _make_finalize_node(llm: BaseChatModel, tracer: TraceCollector):
     async def finalize_node(state: StockAgentState) -> dict[str, Any]:
         report = await _generate_report(llm, state, tracer)
+        report = report.model_copy(update={"generated_at": _precise_now_iso()})
         return {"final_output": report, "status": "finished"}
 
     return finalize_node
@@ -416,4 +421,3 @@ def build_agent_graph(
     graph.add_edge("finalize", END)
 
     return graph.compile(checkpointer=checkpointer)
-

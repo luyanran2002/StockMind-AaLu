@@ -27,3 +27,9 @@ def test_demo_supports_chinese_and_other_tickers():
     assert report.ticker == "TSM"
     assert any("\u4e00" <= ch <= "\u9fff" for ch in report.summary)
 
+
+def test_report_has_precise_generated_at():
+    agent = _agent("NVDA", "en")
+    report = agent.invoke("research NVDA", ticker="NVDA")
+    assert report.generated_at is not None
+    assert "T" in report.generated_at
