@@ -332,6 +332,33 @@ def _fallback_report(ticker: str, text: str, note: str) -> StockResearchReport:
     )
 
 
+def _no_data_report(ticker: str, language: str, errors: list[str]) -> StockResearchReport:
+    """Honest report when no tool observation was collected (e.g. all tools failed)."""
+    if language == "zh":
+        summary = "无法生成研究报告：所有数据工具均失败，未收集到任何可验证的数据。"
+        detail = "数据源不可用（例如被限流、网络不可达或无权限）。请检查数据源后重试。"
+    else:
+        summary = "Unable to produce a research report: every data tool failed and no evidence was collected."
+        detail = "The data source is unavailable (rate-limited, unreachable, or unauthenticated). Please check it and retry."
+
+    reasons = errors[:5] if errors else [detail]
+    return StockResearchReport(
+        ticker=ticker,
+        summary=summary,
+        market_analysis=detail,
+        financial_analysis=detail,
+        technical_analysis=detail,
+        news_analysis=detail,
+        valuation_analysis=detail,
+        risk_analysis=detail,
+        bull_case=[],
+        bear_case=[],
+        key_metrics={},
+        uncertainty=reasons,
+        conclusion=summary,
+    )
+
+
 async def _generate_report(
     llm: BaseChatModel, state: StockAgentState, tracer: TraceCollector
 ) -> StockResearchReport:
@@ -381,7 +408,11 @@ async def _generate_report(
     except Exception:
         pass
 
-    # 4) Last resort: wrap the raw reasoning in a minimal, honest report.
+    # 4) No observations collected (e.g. every tool failed) -> honest no-data report.
+    if not state.get("observations"):
+        return _no_data_report(ticker, state.get("language", "en"), state.get("errors", []))
+
+    # 5) Last resort: wrap the raw reasoning in a minimal, honest report.
     return _fallback_report(
         ticker,
         final_report,

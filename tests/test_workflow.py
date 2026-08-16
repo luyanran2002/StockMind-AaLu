@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage
 
 from app.agents.react_agent import StockMindAgent
 from app.graph.workflow import AgentConfig
+from app.models.demo import GROUNDED_REPORT_MARKER
 from app.tools import build_tools
 from app.tools.providers import MockMarketDataProvider
 
@@ -88,3 +89,16 @@ def test_unknown_tool_is_recorded_as_error_but_does_not_crash():
     state = agent.run("Analyze NVDA", ticker="NVDA")
     assert state["final_output"].ticker == "NVDA"
     assert any("Unknown tool" in e for e in state["errors"])
+
+
+def test_no_observations_does_not_leak_internal_marker():
+    llm = GenericFakeChatModel(messages=iter([AIMessage(content=GROUNDED_REPORT_MARKER)]))
+    agent = StockMindAgent(
+        llm=llm,
+        tools=build_tools(MockMarketDataProvider(seed=1)),
+        config=AgentConfig(tool_timeout_seconds=5, tool_retries=0),
+    )
+    report = agent.invoke("Analyze NVDA", ticker="NVDA")
+    assert GROUNDED_REPORT_MARKER not in report.summary
+    assert GROUNDED_REPORT_MARKER not in report.conclusion
+    assert report.summary

@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 from app.agents.react_agent import StockMindAgent
 from app.graph.checkpoint import build_checkpointer
 from app.graph.workflow import AgentConfig, _backoff_delay
+from app.observability.tracing import TraceCollector
 from app.schemas.report import StockResearchReport
 from app.tools import build_tools
 from app.tools.providers import MockMarketDataProvider
@@ -101,3 +102,15 @@ def test_backoff_grows_and_is_capped():
     assert all(delay <= 2.0 for delay in delays)
     assert delays[3] == pytest.approx(2.0)
 
+
+def test_trace_summary_dedupes_repeated_errors():
+    tracer = TraceCollector()
+    tracer.start_run("query")
+    for _ in range(3):
+        tracer.record(
+            event_type="tool_call",
+            tool_name="get_stock_price",
+            error="YFRateLimitError: Too Many Requests",
+        )
+    summary = tracer.summarize()
+    assert summary.count("YFRateLimitError") == 1

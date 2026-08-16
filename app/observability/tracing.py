@@ -119,12 +119,20 @@ class TraceCollector:
             latency = f"  {event.latency_ms / 1000.0:.2f}s" if event.latency_ms is not None else ""
             lines.append(f"{index}. {label:<26}{latency}")
             index += 1
-        errors = [e for e in self.events if e.error]
-        if errors:
+        seen_errors = set()
+        error_lines = []
+        for event in self.events:
+            if not event.error:
+                continue
+            key = (event.tool_name, event.error)
+            if key in seen_errors:
+                continue
+            seen_errors.add(key)
+            error_lines.append(f"  - {event.tool_name or event.event_type}: {event.error}")
+        if error_lines:
             lines.append("")
             lines.append("Errors:")
-            for e in errors:
-                lines.append(f"  - {e.tool_name or e.event_type}: {e.error}")
+            lines.extend(error_lines)
         return "\n".join(lines)
 
     def _write_jsonl(self, event: TraceEvent) -> None:
