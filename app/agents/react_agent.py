@@ -46,7 +46,12 @@ class StockMindAgent:
         checkpointer: Any | None = None,
     ) -> None:
         self.llm = llm or get_chat_model()
-        self.tools = tools or build_tools(get_data_provider())
+        if tools is None:
+            self.data_provider = get_data_provider()
+            self.tools = build_tools(self.data_provider)
+        else:
+            self.data_provider = None
+            self.tools = tools
 
         explicit_language = language or os.getenv("STOCKMIND_LANGUAGE")
         resolved_language = (explicit_language or "en").strip().lower()
@@ -67,7 +72,11 @@ class StockMindAgent:
         self.language = self.config.language
 
         trace_dir = os.getenv("STOCKMIND_TRACE_DIR") or None
-        self.tracer = tracer or TraceCollector(log_dir=trace_dir)
+        self.tracer = tracer or TraceCollector(
+            log_dir=trace_dir, model=getattr(self.llm, "model_name", None)
+        )
+        if tracer is not None:
+            tracer.model = getattr(self.llm, "model_name", None)
 
         self.checkpointer = self._resolve_checkpointer(checkpointer)
         self.graph = build_agent_graph(

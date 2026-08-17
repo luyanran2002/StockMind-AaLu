@@ -88,6 +88,9 @@ app/
 │   └── demo.py             # offline scripted demo model
 ├── reporting/
 │   └── assembler.py        # evidence-grounded report fallback
+├── evaluation/
+│   ├── evaluator.py        # Phase 4 evaluation framework
+│   └── datasets/questions.json
 ├── tools/
 │   ├── base.py             # provenance + metric serialization
 │   ├── analysis.py         # pure deterministic computation
@@ -98,7 +101,8 @@ app/
 │   ├── technical.py        # technical indicator tools
 │   └── valuation.py        # valuation tools
 ├── observability/
-│   └── tracing.py          # TraceCollector
+│   ├── tracing.py          # TraceCollector
+│   └── cost.py             # token cost estimation
 ├── schemas/
 │   └── report.py           # StockResearchReport
 └── visualization/
@@ -210,6 +214,31 @@ python examples/async_research.py --ticker NVDA --lang en
 
 ---
 
+## Evaluation
+
+Run the evaluation dataset and score the agent:
+
+```bash
+python examples/evaluate.py --lang en
+```
+
+It reports task success, tool-selection accuracy, data grounding, numerical
+accuracy, answer quality, average latency, tokens and estimated cost.
+
+```text
+EVALUATION REPORT
+Task Success Rate:      100%
+Tool Selection Accuracy:100%
+Data Grounding Rate:    100%
+Numerical Accuracy:     100%
+Answer Quality (avg):   100%
+Average Latency:        0.02s
+Average Tokens:         0
+Average Cost:           $0.000000
+```
+
+---
+
 ## Prompt journal
 
 A standalone prompt recorder lives in [`promptlog/`](promptlog/):
@@ -274,5 +303,5 @@ stored in code.
 - [x] **Phase 1** — ReAct loop + market/news tools.
 - [x] **Phase 2** — financial, technical, news and valuation tools.
 - [x] **Phase 3** — async execution, checkpointing, retries/backoff hardening.
-- [ ] **Phase 4** — richer tracing, evaluation datasets, cost tracking.
+- [x] **Phase 4** — richer tracing, evaluation datasets, cost tracking.
 - [ ] **Phase 5** — historical evaluation / backtesting of signals.

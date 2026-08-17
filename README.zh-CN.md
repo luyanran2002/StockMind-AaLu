@@ -83,6 +83,9 @@ app/
 │   └── demo.py             # 离线脚本化演示模型
 ├── reporting/
 │   └── assembler.py        # 基于证据的报告兜底
+├── evaluation/
+│   ├── evaluator.py        # Phase 4 评估框架
+│   └── datasets/questions.json
 ├── tools/
 │   ├── base.py             # 溯源 + 指标序列化
 │   ├── analysis.py         # 纯确定性计算
@@ -93,7 +96,8 @@ app/
 │   ├── technical.py        # 技术指标工具
 │   └── valuation.py        # 估值工具
 ├── observability/
-│   └── tracing.py          # TraceCollector
+│   ├── tracing.py          # TraceCollector
+│   └── cost.py             # token 成本估算
 ├── schemas/
 │   └── report.py           # StockResearchReport
 └── visualization/
@@ -199,6 +203,31 @@ python examples/async_research.py --ticker NVDA --lang zh
 
 ---
 
+## 评估
+
+运行评估数据集并对 Agent 打分：
+
+```bash
+python examples/evaluate.py --lang zh
+```
+
+它会报告任务成功率、工具选择准确率、数据落地率、数值准确率、答案质量、平均延迟、
+token 数与估算成本。
+
+```text
+EVALUATION REPORT
+Task Success Rate:      100%
+Tool Selection Accuracy:100%
+Data Grounding Rate:    100%
+Numerical Accuracy:     100%
+Answer Quality (avg):   100%
+Average Latency:        0.02s
+Average Tokens:         0
+Average Cost:           $0.000000
+```
+
+---
+
 ## Prompt 记录
 
 独立的 prompt 记录框架位于 [`promptlog/`](promptlog/)：
@@ -258,5 +287,5 @@ API key 由底层 SDK 从环境变量读取，绝不写入代码。
 - [x] **Phase 1** — ReAct 循环 + 市场/新闻工具。
 - [x] **Phase 2** — 财务、技术面、新闻与估值工具。
 - [x] **Phase 3** — 异步执行、检查点、重试/退避加固。
-- [ ] **Phase 4** — 更丰富的追踪、评估数据集、成本统计。
+- [x] **Phase 4** — 更丰富的追踪、评估数据集、成本统计。
 - [ ] **Phase 5** — 历史评估 / 信号回测。

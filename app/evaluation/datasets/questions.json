@@ -1,0 +1,24 @@
+[
+  {
+    "question": "What is NVDA's current price and recent price trend?",
+    "ticker": "NVDA",
+    "expected_tools": ["get_stock_price", "get_historical_prices"]
+  },
+  {
+    "question": "Summarize NVDA's financials, valuation and technicals.",
+    "ticker": "NVDA",
+    "expected_tools": [
+      "get_income_statement",
+      "get_balance_sheet",
+      "get_cash_flow",
+      "calculate_pe",
+      "calculate_rsi"
+    ]
+  },
+  {
+    "question": "Compare AMD's recent news and risk profile.",
+    "ticker": "AMD",
+    "expected_tools": ["search_company_news", "calculate_volatility", "calculate_drawdown"]
+  }
+]
+

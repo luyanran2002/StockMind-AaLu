@@ -16,6 +16,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.observability.cost import estimate_cost_usd, token_counts
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -38,16 +40,21 @@ class TraceEvent(BaseModel):
 class TraceCollector:
     """Collects trace events for a run and can render a summary."""
 
-    def __init__(self, log_dir: str | Path | None = None) -> None:
+    def __init__(self, log_dir: str | Path | None = None, model: str | None = None) -> None:
         self.events: list[TraceEvent] = []
         self.run_id: str | None = None
         self._run_started_at: float | None = None
         self.log_dir = Path(log_dir) if log_dir else None
+        self.model = model
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
 
     def start_run(self, user_query: str) -> str:
         self.run_id = uuid.uuid4().hex[:12]
         self._run_started_at = time.perf_counter()
         self.events = []
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
         self.record(event_type="run_start", tool_input={"user_query": user_query})
         return self.run_id
 
@@ -78,6 +85,9 @@ class TraceCollector:
             error=error,
             final_status=final_status,
         )
+        input_tokens, output_tokens = token_counts(token_usage)
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
         self.events.append(event)
         self._write_jsonl(event)
 
@@ -93,6 +103,14 @@ class TraceCollector:
 
         lines = [f"Run #{self.run_id}", ""]
         lines.append(f"Total latency: {self.total_latency_ms() / 1000.0:.2f}s")
+        lines.append(
+            f"Tokens: {self.total_input_tokens + self.total_output_tokens} "
+            f"(in {self.total_input_tokens} / out {self.total_output_tokens})"
+        )
+        cost = estimate_cost_usd(
+            self.model, self.total_input_tokens, self.total_output_tokens
+        )
+        lines.append(f"Estimated cost: ${cost:.6f}")
         lines.append("")
         lines.append("Steps:")
         index = 1
